@@ -4,10 +4,8 @@ import se.kth.ict.id1212.minor.hangman.server.db.Word_DB;
 import se.kth.ict.id1212.minor.hangman.server.controller.Controller;
 import se.kth.ict.id1212.minor.hangman.common.Constants;
 import se.kth.ict.id1212.minor.hangman.common.MsgType;
-import se.kth.ict.id1212.minor.hangman.common.Communication;
 
 import java.io.IOException;
-import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.ForkJoinPool;

@@ -104,6 +104,10 @@ public class Server {
         }
     }
 
+    public void wakeUp() {
+        selector.wakeup();
+    }
+
 
     private class Client {
         private final ClientHandler clientHandler;

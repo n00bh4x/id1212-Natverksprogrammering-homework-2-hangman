@@ -20,6 +20,8 @@ public class ServerHandler {
         thread =  new Thread(incoming);
         thread.start();
     }
+
+
     private Socket createSocket(String address, int portNumber) {
         Socket socket = null;
         try {

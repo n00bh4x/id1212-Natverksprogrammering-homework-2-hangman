@@ -17,12 +17,10 @@ public class ClientHandler implements Runnable {
 
     private final Server server;
     private final SocketChannel clientChannel;
-    private boolean connected;
     private final Controller controller;
     private ByteBuffer messageFromClient = ByteBuffer.allocateDirect(Constants.MAX_MSG_LENGTH);
     private ByteBuffer messageToClient = ByteBuffer.allocateDirect(Constants.MAX_MSG_LENGTH);
 
-    private Socket clientSocket;
     private Communication communication;
     private String fromClient;
     private String toClient;
@@ -40,7 +38,6 @@ public class ClientHandler implements Runnable {
     public ClientHandler(Server server, SocketChannel clientChannel, Word_DB words) {
         this.server = server;
         this.clientChannel = clientChannel;
-        connected = true;
         controller = new Controller(words);
         createWelcomeMessage();
     }
@@ -87,21 +84,27 @@ public class ClientHandler implements Runnable {
                 controller.newGame();
                 toClient = controller.getMessage();
                 makeMessageReady(toClient);
+                server.wakeUp();
                 break;
             case QUIT:
                 makeMessageReady("Thanks for playing Hangman!");
-                disconnect();
+                //disconnect();
+                server.wakeUp();
                 break;
             case GUESS:
                 controller.handleGuess(message.guess);
                 toClient = controller.getMessage();
                 makeMessageReady(toClient);
+                server.wakeUp();
                 break;
             default:
                 makeMessageReady("Input not allowed. Try again");
+                server.wakeUp();
         }
     }
 
+
+    /*
     private void disconnect() {
         try {
             clientSocket.close();
@@ -110,7 +113,7 @@ public class ClientHandler implements Runnable {
         }
         connected = false;
     }
-
+    */
 
     private static class Message {
         private MsgType msgType;

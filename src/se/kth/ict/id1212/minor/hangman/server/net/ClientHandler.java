@@ -21,19 +21,9 @@ public class ClientHandler implements Runnable {
     private ByteBuffer messageFromClient = ByteBuffer.allocateDirect(Constants.MAX_MSG_LENGTH);
     private ByteBuffer messageToClient = ByteBuffer.allocateDirect(Constants.MAX_MSG_LENGTH);
 
-    private Communication communication;
     private String fromClient;
     private String toClient;
 
-
-    /*
-    public ClientHandler(Socket clientSocket, Word_DB words) {
-        this.clientSocket = clientSocket;
-        connected = true;
-        communication = new Communication(this.clientSocket);
-        controller = new Controller(words);
-    }
-    */
 
     public ClientHandler(Server server, SocketChannel clientChannel, Word_DB words) {
         this.server = server;
@@ -43,7 +33,8 @@ public class ClientHandler implements Runnable {
     }
 
     private void createWelcomeMessage() {
-        makeMessageReady("Welcome to Hangman!\n 'play' to play or 'quit' to quit game.");
+        makeMessageReady("Welcome to Hangman!\n" +
+                "'play' to play or 'quit' to quit game.");
     }
 
     private void makeMessageReady(String message) {

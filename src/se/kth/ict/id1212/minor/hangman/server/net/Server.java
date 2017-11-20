@@ -16,7 +16,6 @@ import java.util.Queue;
 import se.kth.ict.id1212.minor.hangman.server.db.Word_DB;
 
 public class Server {
-    private ServerSocket serverSocket;
     private final Word_DB wordList;
     private Selector selector;
     private ServerSocketChannel serverSocketChannel;
@@ -25,7 +24,6 @@ public class Server {
     public Server(int port, final Word_DB wordList) {
         this.wordList = wordList;
         try {
-            this.serverSocket = new ServerSocket(port);
             selector = Selector.open();
             initServerSocketChannel(port);
             serve();

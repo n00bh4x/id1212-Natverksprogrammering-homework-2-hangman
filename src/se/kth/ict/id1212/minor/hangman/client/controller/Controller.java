@@ -13,8 +13,5 @@ public class Controller {
     public void sendMessage(String fromUser) {
         serverHandler.sendMessage(fromUser);
     }
-
-    public void disconnect() {
-        serverHandler.disconnect();
-    }
 }
+

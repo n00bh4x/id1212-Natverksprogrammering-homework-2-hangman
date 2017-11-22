@@ -12,8 +12,7 @@ import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayDeque;
 import java.util.Queue;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.CompletableFuture;
 
 public class ServerHandler implements Runnable {
     private Selector selector;
@@ -22,18 +21,23 @@ public class ServerHandler implements Runnable {
     private final Queue<ByteBuffer> messagesToSend = new ArrayDeque<>();
     private final ByteBuffer messageFromServer = ByteBuffer.allocateDirect(Constants.MAX_MSG_LENGTH);
     private OutputHandler outputHandler;
+    private String address;
+    private int portNumber;
+    private Thread thread;
 
     private boolean connected;
     private boolean timeToSend;
-    
+    private boolean goodByeMessageReceived;
+
     public ServerHandler(String address, int portNumber, OutputHandler outputHandler) {
-        connect(address, portNumber);
-        initConnection();
-        initSelector();
+        this.address = address;
+        this.portNumber = portNumber;
         this.outputHandler = outputHandler;
         timeToSend = false;
         connected = true;
-        new Thread(this).start();
+        goodByeMessageReceived = false;
+        thread = new Thread(this);
+        thread.start();
     }
 
     private void initSelector() {
@@ -75,14 +79,14 @@ public class ServerHandler implements Runnable {
     @Override
     public void run() {
         try {
-
-
-            while (connected || !messagesToSend.isEmpty()) {
+            connect(address, portNumber);
+            initConnection();
+            initSelector();
+            while (connected || !messagesToSend.isEmpty() || !goodByeMessageReceived) {
                 if (timeToSend) {
                     socketChannel.keyFor(selector).interestOps(SelectionKey.OP_WRITE);
                     timeToSend = false;
                 }
-
                 selector.select();
                 for (SelectionKey key : selector.selectedKeys()) {
                     selector.selectedKeys().remove(key);
@@ -92,12 +96,14 @@ public class ServerHandler implements Runnable {
                     if (key.isConnectable()) {
                         completeConnection(key);
                     } else if (key.isReadable()) {
-                        recvFromServer(key);
+                        receiveFromServer();
                     } else if (key.isWritable()) {
                         sendToServer(key);
                     }
                 }
             }
+
+            doDisconnect();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -122,11 +128,12 @@ public class ServerHandler implements Runnable {
                 }
                 messagesToSend.remove();
             }
-            key.interestOps(SelectionKey.OP_READ);
+
         }
+        key.interestOps(SelectionKey.OP_READ);
     }
 
-    private void recvFromServer(SelectionKey key) {
+    private void receiveFromServer() {
         messageFromServer.clear();
         int numOfReadBytes = 0;
         try {
@@ -135,18 +142,19 @@ public class ServerHandler implements Runnable {
             e.printStackTrace();
         }
         if (numOfReadBytes == -1) {
-            System.out.println("FAIL");
+            //System.out.println("FAIL");
             return;
         }
-        String recvdString = extractMessageFromBuffer();
-        notifyUser(recvdString);
+        String receivedMessage = extractMessageFromBuffer();
+        if(receivedMessage.equalsIgnoreCase("Thanks for playing Hangman!")) {
+            goodByeMessageReceived = true;
+        }
+        notifyUser(receivedMessage);
     }
 
-    private void notifyUser(String recvdString) {
-        Executor pool = ForkJoinPool.commonPool();
-        pool.execute(() -> outputHandler.handleMessage(recvdString));
+    private void notifyUser(String message) {
+        CompletableFuture.runAsync(() -> outputHandler.handleMessage(message));
     }
-
 
     private String extractMessageFromBuffer() {
         messageFromServer.flip();
@@ -155,4 +163,15 @@ public class ServerHandler implements Runnable {
         return new String(bytes);
     }
 
+    public void disconnect() {
+        connected = false;
+    }
+    public void doDisconnect() {
+        try {
+            socketChannel.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        socketChannel.keyFor(selector).cancel();
+    }
 }

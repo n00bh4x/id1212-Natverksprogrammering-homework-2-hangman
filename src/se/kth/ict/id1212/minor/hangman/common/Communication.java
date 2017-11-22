@@ -13,7 +13,6 @@ public class Communication {
     public Communication(Socket clientSocket) {
         this.fromClient = setupReader(clientSocket);
         this.toClient = setupWriter(clientSocket);
-
     }
 
     private BufferedReader setupReader(Socket clientSocket) {

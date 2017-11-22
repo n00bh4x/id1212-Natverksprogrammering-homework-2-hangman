@@ -28,7 +28,7 @@ public class View {
             }
             controller.sendMessage(toServer);
         }
-        //controller.disconnect();
+        controller.disconnect();
     }
 
     private String parseMsg(String fromUser) {

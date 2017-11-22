@@ -2,16 +2,12 @@ package se.kth.ict.id1212.minor.hangman.server.net;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.StandardSocketOptions;
-import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.ArrayDeque;
 import java.util.Iterator;
-import java.util.Queue;
 
 import se.kth.ict.id1212.minor.hangman.server.db.Word_DB;
 
@@ -23,46 +19,36 @@ public class Server {
 
     public Server(int port, final Word_DB wordList) {
         this.wordList = wordList;
+        serve(port);
+    }
+
+    private void serve(int port){
         try {
             selector = Selector.open();
             initServerSocketChannel(port);
-            serve();
-        } catch(Exception e) {
-        }
-    }
-
-    private void serve(){
-        while(true){
-            try {
-                selector.select();
-                Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
-                while(iterator.hasNext()) {
-                    SelectionKey key = iterator.next();
-                    if(!key.isValid()) {
-                        continue;
-                    }
-                    if(key.isAcceptable()) {
-                        startHandler(key);
-                    } else if(key.isReadable()) {
-                        receiveMessageFromClient(key);
-                        configureInterest(key);
-                    } else if(key.isWritable()) {
-                        sendMessageToClient(key);
-                        configureInterest(key);
+            while(true){
+                    selector.select();
+                    Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
+                    while(iterator.hasNext()) {
+                        SelectionKey key = iterator.next();
+                        iterator.remove();
+                        if(!key.isValid()) {
+                            continue;
+                        }
+                        if(key.isAcceptable()) {
+                            startHandler(key);
+                        } else if(key.isReadable()) {
+                            receiveMessageFromClient(key);
+                        } else if(key.isWritable()) {
+                            sendMessageToClient(key);
+                        }
                     }
                 }
-            } catch (IOException e) {
-            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
-    private void configureInterest(SelectionKey key) {
-        if(key.interestOps() == (1 << 0)) {
-            key.interestOps(SelectionKey.OP_WRITE);
-        } else {
-            key.interestOps(SelectionKey.OP_READ);
-        }
-    }
 
     private void startHandler(SelectionKey key) {
         try{
@@ -70,27 +56,38 @@ public class Server {
             SocketChannel clientChannel = serverSocketChannel.accept();
             clientChannel.configureBlocking(false);
             ClientHandler clientHandler = new ClientHandler(this, clientChannel, wordList);
-            Client client = new Client(clientHandler);
-            clientChannel.register(this.selector, SelectionKey.OP_WRITE, client);
+            clientChannel.register(this.selector, SelectionKey.OP_WRITE, clientHandler);
             clientChannel.setOption(StandardSocketOptions.SO_LINGER, 5000);
         } catch (IOException e) {
-            // do something
+            e.printStackTrace();
         }
     }
 
     private void sendMessageToClient(SelectionKey key) {
-        Client client = (Client) key.attachment();
-        client.sendMessage();
+        try {
+            ClientHandler client = (ClientHandler) key.attachment();
+            client.sendMessage();
+            key.interestOps(SelectionKey.OP_READ);
+        } catch (Exception e){
+            e.printStackTrace();
+        }
     }
 
     private void receiveMessageFromClient(SelectionKey key) {
+        ClientHandler client = (ClientHandler) key.attachment();
         try {
-            Client client = (Client) key.attachment();
-            client.clientHandler.receiveMessage();
+            client.receiveMessage(key);
         } catch (Exception e){
-            // Do something
+            e.printStackTrace();
         }
     }
+
+    private void removeClient(SelectionKey clientKey) throws IOException {
+        ClientHandler client = (ClientHandler) clientKey.attachment();
+        client.disconnectClient();
+        clientKey.cancel();
+    }
+
 
     private void initServerSocketChannel(int port) {
         try {
@@ -99,23 +96,11 @@ public class Server {
             serverSocketChannel.bind(new InetSocketAddress(port));
             serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
         } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
     public void wakeUp() {
         selector.wakeup();
-    }
-
-
-    private class Client {
-        private final ClientHandler clientHandler;
-
-        private Client(ClientHandler handler) {
-            clientHandler = handler;
-        }
-
-        private void sendMessage() {
-            clientHandler.sendMessage();
-        }
     }
 }

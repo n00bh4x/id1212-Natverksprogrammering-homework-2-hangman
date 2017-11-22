@@ -7,6 +7,7 @@ import se.kth.ict.id1212.minor.hangman.common.MsgType;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.ForkJoinPool;
 
@@ -18,6 +19,7 @@ public class ClientHandler implements Runnable {
     private final Controller controller;
     private ByteBuffer messageFromClient = ByteBuffer.allocateDirect(Constants.MAX_MSG_LENGTH);
     private ByteBuffer messageToClient = ByteBuffer.allocateDirect(Constants.MAX_MSG_LENGTH);
+    private SelectionKey key;
 
     private String fromClient;
     private String toClient;
@@ -39,7 +41,8 @@ public class ClientHandler implements Runnable {
         messageToClient = ByteBuffer.wrap(message.getBytes());
     }
 
-    void receiveMessage() throws IOException {
+    void receiveMessage(SelectionKey key) throws IOException {
+        this.key = key;
         messageFromClient.clear();
         int numOfReadBytes;
         numOfReadBytes = clientChannel.read(messageFromClient);
@@ -64,6 +67,11 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    private void readyForWrite(){
+        key.interestOps(SelectionKey.OP_WRITE);
+        server.wakeUp();
+    }
+
     @Override
     public void run() {
         fromClient = extractMessageFromBuffer();
@@ -73,22 +81,29 @@ public class ClientHandler implements Runnable {
                 controller.newGame();
                 toClient = controller.getMessage();
                 makeMessageReady(toClient);
-                server.wakeUp();
+                readyForWrite();
                 break;
             case QUIT:
                 makeMessageReady("Thanks for playing Hangman!");
-                //disconnect();
-                server.wakeUp();
+                readyForWrite();
                 break;
             case GUESS:
                 controller.handleGuess(message.guess);
                 toClient = controller.getMessage();
                 makeMessageReady(toClient);
-                server.wakeUp();
+                readyForWrite();
                 break;
             default:
                 makeMessageReady("Input not allowed. Try again");
-                server.wakeUp();
+                readyForWrite();
+        }
+    }
+
+    public void disconnectClient() {
+        try {
+            clientChannel.close();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 

@@ -23,7 +23,6 @@ public class ServerHandler implements Runnable {
     private OutputHandler outputHandler;
     private String address;
     private int portNumber;
-    private Thread thread;
 
     private boolean connected;
     private boolean timeToSend;
@@ -34,10 +33,8 @@ public class ServerHandler implements Runnable {
         this.portNumber = portNumber;
         this.outputHandler = outputHandler;
         timeToSend = false;
-        connected = true;
         goodByeMessageReceived = false;
-        thread = new Thread(this);
-        thread.start();
+        new Thread(this).start();
     }
 
     private void initSelector() {
@@ -62,8 +59,6 @@ public class ServerHandler implements Runnable {
         }
 
     }
-
-
 
 
     private void connect(String host, int port) {
@@ -97,12 +92,12 @@ public class ServerHandler implements Runnable {
                         completeConnection(key);
                     } else if (key.isReadable()) {
                         receiveFromServer();
+
                     } else if (key.isWritable()) {
                         sendToServer(key);
                     }
                 }
             }
-
             doDisconnect();
         } catch (Exception e) {
             e.printStackTrace();
@@ -128,7 +123,6 @@ public class ServerHandler implements Runnable {
                 }
                 messagesToSend.remove();
             }
-
         }
         key.interestOps(SelectionKey.OP_READ);
     }
@@ -142,8 +136,9 @@ public class ServerHandler implements Runnable {
             e.printStackTrace();
         }
         if (numOfReadBytes == -1) {
-            //System.out.println("FAIL");
-            return;
+            doDisconnect();
+            notifyUser("Connection lost.");
+            System.exit(0);
         }
         String receivedMessage = extractMessageFromBuffer();
         if(receivedMessage.equalsIgnoreCase("Thanks for playing Hangman!")) {

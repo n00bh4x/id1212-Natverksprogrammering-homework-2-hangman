@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayDeque;
+import java.util.Queue;
 import java.util.concurrent.ForkJoinPool;
 
 
@@ -17,8 +19,9 @@ public class ClientHandler implements Runnable {
     private final Server server;
     private final SocketChannel clientChannel;
     private final Controller controller;
+    private final Queue<ByteBuffer> messagesToSend;
+    private final Queue<ByteBuffer> receivedMessages;
     private ByteBuffer messageFromClient = ByteBuffer.allocateDirect(Constants.MAX_MSG_LENGTH);
-    private ByteBuffer messageToClient = ByteBuffer.allocateDirect(Constants.MAX_MSG_LENGTH);
     private SelectionKey key;
 
     private String fromClient;
@@ -29,16 +32,18 @@ public class ClientHandler implements Runnable {
         this.server = server;
         this.clientChannel = clientChannel;
         controller = new Controller(words);
-        createWelcomeMessage();
+        messagesToSend = new ArrayDeque<>();
+        receivedMessages = new ArrayDeque<>();
+        welcomeMessage();
     }
 
-    private void createWelcomeMessage() {
+    private void welcomeMessage() {
         makeMessageReady("Welcome to Hangman!\n" +
                 "'play' to play or 'quit' to quit game.");
     }
 
-    private void makeMessageReady(String message) {
-        messageToClient = ByteBuffer.wrap(message.getBytes());
+    private synchronized void makeMessageReady(String message) {
+        messagesToSend.add(ByteBuffer.wrap(message.getBytes()));
     }
 
     void receiveMessage(SelectionKey key) throws IOException {
@@ -46,25 +51,31 @@ public class ClientHandler implements Runnable {
         messageFromClient.clear();
         int numOfReadBytes;
         numOfReadBytes = clientChannel.read(messageFromClient);
+        synchronized (receivedMessages) {
+            receivedMessages.add(messageFromClient);
+        }
         if (numOfReadBytes == -1) {
             throw new IOException("Client has closed connection.");
         }
         ForkJoinPool.commonPool().execute(this);
     }
 
-    private String extractMessageFromBuffer() {
-        messageFromClient.flip();
-        byte[] bytes = new byte[messageFromClient.remaining()];
-        messageFromClient.get(bytes);
+    private String extractMessageFromBuffer(ByteBuffer msg) {
+        msg.flip();
+        byte[] bytes = new byte[msg.remaining()];
+        msg.get(bytes);
         return new String(bytes);
     }
 
-    void sendMessage() {
-        try {
-            clientChannel.write(messageToClient);
-        } catch (IOException e) {
-            e.printStackTrace();
+    void sendMessage() throws IOException{
+        ByteBuffer msg;
+        synchronized (messagesToSend) {
+            while ((msg = messagesToSend.peek()) != null) {
+                clientChannel.write(msg);
+                messagesToSend.remove();
+            }
         }
+
     }
 
     private void readyForWrite(){
@@ -74,28 +85,41 @@ public class ClientHandler implements Runnable {
 
     @Override
     public void run() {
-        fromClient = extractMessageFromBuffer();
-        Message message = new Message(fromClient);
-        switch (message.msgType) {
-            case PLAY:
-                controller.newGame();
-                toClient = controller.getMessage();
-                makeMessageReady(toClient);
-                readyForWrite();
-                break;
-            case QUIT:
-                makeMessageReady("Thanks for playing Hangman!");
-                readyForWrite();
-                break;
-            case GUESS:
-                controller.handleGuess(message.guess);
-                toClient = controller.getMessage();
-                makeMessageReady(toClient);
-                readyForWrite();
-                break;
-            default:
-                makeMessageReady("Input not allowed. Try again");
-                readyForWrite();
+        ByteBuffer msg;
+        boolean moreMessages;
+        synchronized (receivedMessages) {
+            moreMessages = receivedMessages.peek() != null;
+        }
+
+        while (moreMessages) {
+            synchronized (receivedMessages) {
+                msg = receivedMessages.peek();
+                receivedMessages.remove();
+                moreMessages = receivedMessages.peek() != null;
+            }
+            fromClient = extractMessageFromBuffer(msg);
+            Message message = new Message(fromClient);
+            switch (message.msgType) {
+                case PLAY:
+                    controller.newGame();
+                    toClient = controller.getMessage();
+                    makeMessageReady(toClient);
+                    readyForWrite();
+                    break;
+                case QUIT:
+                    makeMessageReady("Thanks for playing Hangman!");
+                    readyForWrite();
+                    break;
+                case GUESS:
+                    controller.handleGuess(message.guess);
+                    toClient = controller.getMessage();
+                    makeMessageReady(toClient);
+                    readyForWrite();
+                    break;
+                default:
+                    makeMessageReady("Input not allowed. Try again");
+                    readyForWrite();
+            }
         }
     }
 
@@ -106,18 +130,6 @@ public class ClientHandler implements Runnable {
             e.printStackTrace();
         }
     }
-
-
-    /*
-    private void disconnect() {
-        try {
-            clientSocket.close();
-        } catch (IOException ioe) {
-            ioe.printStackTrace();
-        }
-        connected = false;
-    }
-    */
 
     private static class Message {
         private MsgType msgType;

@@ -68,6 +68,8 @@ public class Server {
             ClientHandler client = (ClientHandler) key.attachment();
             client.sendMessage();
             key.interestOps(SelectionKey.OP_READ);
+        } catch (IOException e) {
+            removeClient(key);
         } catch (Exception e){
             e.printStackTrace();
         }
@@ -77,12 +79,14 @@ public class Server {
         ClientHandler client = (ClientHandler) key.attachment();
         try {
             client.receiveMessage(key);
+        } catch (IOException e) {
+            removeClient(key);
         } catch (Exception e){
             e.printStackTrace();
         }
     }
 
-    private void removeClient(SelectionKey clientKey) throws IOException {
+    private void removeClient(SelectionKey clientKey) {
         ClientHandler client = (ClientHandler) clientKey.attachment();
         client.disconnectClient();
         clientKey.cancel();
@@ -100,7 +104,7 @@ public class Server {
         }
     }
 
-    public void wakeUp() {
+    void wakeUp() {
         selector.wakeup();
     }
 }
